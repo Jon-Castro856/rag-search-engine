@@ -6,15 +6,10 @@ import string
 from nltk import PorterStemmer
 from inverted_index import InvertedIndex
 
-movie_json = "/home/jon/Workspace/Github.com/Jon-Castro856/rag-search-engine/data/movies.json"
 stop_word_file = "/home/jon/Workspace/Github.com/Jon-Castro856/rag-search-engine/data/stopwords.txt"
 
 
 def main() -> None:
-    with open(movie_json, "r") as file:
-        movie_data = json.load(file)
-    movie_dict = movie_data["movies"]
-
     with open(stop_word_file, "r") as file:
         stop_words = file.read()
         stop_list = stop_words.splitlines()
@@ -26,61 +21,62 @@ def main() -> None:
     search_parser = subparsers.add_parser("search", help="Search movies using BM25")
     search_parser.add_argument("query", type=str, help="Search query")
 
+    term_parser = subparsers.add_parser("tf", help="Display frequency of given term in provided movie ID")
+    term_parser.add_argument('term', type=str, help="Frequency query`")
     args = parser.parse_args()
 
-    stemmer = PorterStemmer()
+    index = InvertedIndex()
 
     match args.command:
         case "search":
+            try:
+                index.load()
+            except Exception as e:
+                print(f"error loading index: {e}")
+                return
+            
             query = format_query(args.query, stop_list)
-            movie_list = []
+            matches = check_match(query, index)
 
-            for movie in movie_dict:
-                hit = False
-                movie_tokens = format_title(movie["title"], stop_list)
-                hit = check_match(query, movie_tokens, stemmer)
-                if hit:
-                    movie_list.append(movie)
-                else:
-                    continue
-
-            print(f"Searching for: {args.query}")
-            sorted_movies = sorted(movie_list, key=lambda x: x["id"])
-            for i in range(0, 5):
-                if i == len(sorted_movies):
-                    break
-                print(sorted_movies[i]["title"])
+            print(f"searching for {args.query}")
+            if not matches:
+                print("no matches found")
+                return
+            for match in matches:
+                print("assault" in match["description"])
+                print(f"ID: {match["id"]}\nName: {match["title"]}")
 
         case "build":
-            index = InvertedIndex()
             index.build()
-            docs = index.get_documents("merida")
-            print(len(docs))
-            print(f"First document for the token 'merida'...{docs[0]}")
             index.save()
+            print("index succesfully built and saved to disk")
+
+        case "tf":
+            pass
+
         case _:
             parser.print_help()
 
-
-def format_title(text: str, stop_words: list) -> list:
-    punc_table = str.maketrans("", "", string.punctuation)
-    punc_removed = text.translate(punc_table).split()
-    tokens = [x.lower() for x in punc_removed if x not in stop_words]
-    return tokens
 
 def format_query(text: str, stop_words: list) -> list:
     splitted = text.split()
     tokens = [x.lower() for x in splitted if x != "" and x not in stop_words]
     return tokens
 
-def check_match(query_tokens: list, movie_tokens: list, stemmer: PorterStemmer) -> bool:
+def check_match(query_tokens: list, index: InvertedIndex) -> list:
+    stemmer = PorterStemmer()
+    match_list, hit = [], []
     for query in query_tokens:
         q = stemmer.stem(query)
-        for movie in movie_tokens:
-            m = stemmer.stem(movie)
-            if q in m:
-                return True
-    return False
+        print(q)
+        hit.extend(index.get_documents(q))
+
+    hit.sort()
+    for id in hit:
+        if len(match_list) == 5:
+            return match_list
+        match_list.append(index.docmap[id])
+    return match_list
 
 if __name__ == "__main__":
     main()
