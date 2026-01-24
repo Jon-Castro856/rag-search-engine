@@ -4,13 +4,13 @@ import argparse
 import json
 import string
 from nltk import PorterStemmer
+from inverted_index import InvertedIndex
 
 movie_json = "/home/jon/Workspace/Github.com/Jon-Castro856/rag-search-engine/data/movies.json"
 stop_word_file = "/home/jon/Workspace/Github.com/Jon-Castro856/rag-search-engine/data/stopwords.txt"
 
 
 def main() -> None:
-    stemmer = PorterStemmer()
     with open(movie_json, "r") as file:
         movie_data = json.load(file)
     movie_dict = movie_data["movies"]
@@ -21,11 +21,14 @@ def main() -> None:
     
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    subparsers.add_parser("build", help="Build the inverted index",)
 
     search_parser = subparsers.add_parser("search", help="Search movies using BM25")
     search_parser.add_argument("query", type=str, help="Search query")
 
     args = parser.parse_args()
+
+    stemmer = PorterStemmer()
 
     match args.command:
         case "search":
@@ -47,7 +50,14 @@ def main() -> None:
                 if i == len(sorted_movies):
                     break
                 print(sorted_movies[i]["title"])
-            
+
+        case "build":
+            index = InvertedIndex()
+            index.build()
+            docs = index.get_documents("merida")
+            print(len(docs))
+            print(f"First document for the token 'merida'...{docs[0]}")
+            index.save()
         case _:
             parser.print_help()
 
