@@ -22,7 +22,15 @@ def main() -> None:
     search_parser.add_argument("query", type=str, help="Search query")
 
     term_parser = subparsers.add_parser("tf", help="Display frequency of given term in provided movie ID")
-    term_parser.add_argument('term', type=str, help="Frequency query`")
+    term_parser.add_argument("id", type=int, help="Document ID")
+    term_parser.add_argument("term", type=str, help="Frequency query")
+
+    idf_parser = subparsers.add_parser("idf", help="Obtain frequency score of provided search term")
+    idf_parser.add_argument("term", type=str, help="term to search")
+
+    tfidf_parser = subparsers.add_parser("tfidf", help="Obtain the combined term and inverse index frequency of provided term in provided doc id")
+    tfidf_parser.add_argument("id", type=int, help="document id")
+    tfidf_parser.add_argument("term", type=str, help="term to search")
     args = parser.parse_args()
 
     index = InvertedIndex()
@@ -52,7 +60,35 @@ def main() -> None:
             print("index succesfully built and saved to disk")
 
         case "tf":
-            pass
+            try:
+                index.load()
+            except Exception as e:
+                print(f"Error loading index: {e}")
+                return
+            id, term = args.id, args.term
+            term_count = index.get_tf(id, term)
+            print(term_count)
+
+        case "idf":
+            try:
+                index.load()
+            except Exception as e:
+                print(f"error loading index: {e}")
+
+            score = index.get_term_frequency(args.term)
+            print(f"frequency of {args.term}: {score:.2f}")
+        
+        case "tfidf":
+            try:
+                index.load()
+            except Exception as e:
+                print(f"error loading index: {e}")
+                
+            id, term = args.id, args.term
+            tf = index.get_tf(id, term)
+            idf = index.get_term_frequency(term)
+            tf_idf = tf * idf
+            print(f"TF-IDF Score for {term} in document {id}: {tf_idf:.2f}")
 
         case _:
             parser.print_help()

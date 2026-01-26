@@ -2,6 +2,7 @@ import pickle
 import os
 import json
 import string
+import math
 from nltk import PorterStemmer
 from collections import Counter
 
@@ -26,8 +27,10 @@ class InvertedIndex:
 
     def _add_document(self, doc_id: int, text: str) -> None:
         tokens = self.format_text(text, self.stop_words)
+
         if doc_id not in self.term_frequencies.keys():
                 self.term_frequencies[doc_id] = Counter(tokens)
+
         for t in tokens:
             if t not in self.index.keys():
                 self.index[t] = set()
@@ -39,13 +42,22 @@ class InvertedIndex:
             raise Exception("too many arguments for command")
         
         count = self.term_frequencies.get(doc_id, 0)
-        return count
+        return count[term]
     
     def get_documents(self, term: str) -> list:
-        print(list(self.index["assault"]))
         docs = list(self.index.get(term, set()))
         docs.sort()
         return docs
+    
+    def get_term_frequency(self, term: str) -> int:
+        text = self.format_text(term, self.stop_list)
+        doc_length = len(self.docmap)
+        hits = self.get_documents(text[0])
+        match_length = len(hits)
+
+        frequency = math.log((doc_length + 1) / (match_length + 1))
+        return frequency
+
     
     def format_text(self, text: str, stop_words: list) -> list:
         stemmer = PorterStemmer()
@@ -77,7 +89,7 @@ class InvertedIndex:
             pickle.dump(self.docmap, docmap_file)
 
         with open(self.tf_path, "wb") as tf_file:
-            pickle.dump(self.tf_path, tf_file)
+            pickle.dump(self.term_frequencies, tf_file)
 
     def load(self) -> None:
         if not os.path.isfile(self.index_path):
