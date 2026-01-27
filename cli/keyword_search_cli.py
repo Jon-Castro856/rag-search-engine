@@ -31,6 +31,9 @@ def main() -> None:
     tfidf_parser = subparsers.add_parser("tfidf", help="Obtain the combined term and inverse index frequency of provided term in provided doc id")
     tfidf_parser.add_argument("id", type=int, help="document id")
     tfidf_parser.add_argument("term", type=str, help="term to search")
+
+    bm25idf_parser = subparsers.add_parser("bm25idf", help="Obtain the BM25 IDF score for the provided search term")
+    bm25idf_parser.add_argument("term", type=str, help="term to acquire score for")
     args = parser.parse_args()
 
     index = InvertedIndex()
@@ -90,6 +93,9 @@ def main() -> None:
             tf_idf = tf * idf
             print(f"TF-IDF Score for {term} in document {id}: {tf_idf:.2f}")
 
+        case "bm25idf":
+            score = bm25_idf_command(args.term, index)
+            print(f"score for {args.term}: {score:.2f}")
         case _:
             parser.print_help()
 
@@ -113,6 +119,15 @@ def check_match(query_tokens: list, index: InvertedIndex) -> list:
             return match_list
         match_list.append(index.docmap[id])
     return match_list
+
+def bm25_idf_command(term: str, index: InvertedIndex) -> float:
+    try:
+        index.load()
+    except Exception as e:
+        print("error loading index: {e}")
+        return
+    return index.get_bm25_idf(term)
+
 
 if __name__ == "__main__":
     main()

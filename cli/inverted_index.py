@@ -51,6 +51,9 @@ class InvertedIndex:
     
     def get_term_frequency(self, term: str) -> int:
         text = self.format_text(term, self.stop_list)
+        if len(text) > 1:
+            print("too many terms in argument")
+            return
         doc_length = len(self.docmap)
         hits = self.get_documents(text[0])
         match_length = len(hits)
@@ -58,7 +61,18 @@ class InvertedIndex:
         frequency = math.log((doc_length + 1) / (match_length + 1))
         return frequency
 
-    
+    def get_bm25_idf(self, term: str) -> float:
+        text = self.format_text(term, self.stop_list)
+        if len(text) > 1:
+            print("too many terms in argument")
+            return
+        doc_length = len(self.docmap)
+        hits = self.get_documents(text[0])
+        match_length = len(hits)
+        bm25_idf = math.log((doc_length - match_length + 0.5) / (match_length + 0.5) + 1)
+        return bm25_idf 
+
+
     def format_text(self, text: str, stop_words: list) -> list:
         stemmer = PorterStemmer()
         punc_table = str.maketrans("", "", string.punctuation)
