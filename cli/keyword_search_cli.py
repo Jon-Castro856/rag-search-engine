@@ -5,8 +5,8 @@ import json
 import string
 from nltk import PorterStemmer
 from inverted_index import InvertedIndex
+from config import stop_word_file
 
-stop_word_file = "/home/jon/Workspace/Github.com/Jon-Castro856/rag-search-engine/data/stopwords.txt"
 
 
 def main() -> None:
@@ -34,6 +34,10 @@ def main() -> None:
 
     bm25idf_parser = subparsers.add_parser("bm25idf", help="Obtain the BM25 IDF score for the provided search term")
     bm25idf_parser.add_argument("term", type=str, help="term to acquire score for")
+
+    bm25tf_parser = subparsers.add_parser("bm25tf", help="Retreive the BM25 term frequency score for a provided term within provided document id")
+    bm25tf_parser.add_argument("docid", type=int, help="id of document to look through")
+    bm25tf_parser.add_argument("term", type=str, help="term to search in document")
     args = parser.parse_args()
 
     index = InvertedIndex()
@@ -70,7 +74,8 @@ def main() -> None:
                 return
             id, term = args.id, args.term
             term_count = index.get_tf(id, term)
-            print(term_count)
+            print(index.docmap[id])
+            print(f"Count of {term} in document {id}: {term_count}")
 
         case "idf":
             try:
@@ -96,6 +101,10 @@ def main() -> None:
         case "bm25idf":
             score = bm25_idf_command(args.term, index)
             print(f"score for {args.term}: {score:.2f}")
+
+        case "bm25tf":
+            score = bm25_tf_command(args.docid, args.term, index)
+            print(f"Term Frequency score for {args.term} in {args.docid}: {score:.2f}")
         case _:
             parser.print_help()
 
@@ -127,6 +136,14 @@ def bm25_idf_command(term: str, index: InvertedIndex) -> float:
         print("error loading index: {e}")
         return
     return index.get_bm25_idf(term)
+
+def bm25_tf_command(docid: int, term: str,  index: InvertedIndex) -> float:
+    try:
+        index.load()
+    except Exception as e:
+        print("error loading index: {e}")
+        return
+    return index.get_bm25_tf(docid, term)
 
 
 if __name__ == "__main__":

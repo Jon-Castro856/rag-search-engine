@@ -5,10 +5,10 @@ import string
 import math
 from nltk import PorterStemmer
 from collections import Counter
+from config import BM25_K1, stop_word_file, movie_json, cache_dir
 
-movie_json = "/home/jon/Workspace/Github.com/Jon-Castro856/rag-search-engine/data/movies.json"
-cache_dir = "/home/jon/Workspace/Github.com/Jon-Castro856/rag-search-engine/cache/"
-stop_word_file = "/home/jon/Workspace/Github.com/Jon-Castro856/rag-search-engine/data/stopwords.txt"
+
+
 
 
 class InvertedIndex:
@@ -42,7 +42,12 @@ class InvertedIndex:
             raise Exception("too many arguments for command")
         
         count = self.term_frequencies.get(doc_id, 0)
-        return count[term]
+        return count[token[0]]
+    
+    def get_bm25_tf(self, doc_id: int, term: str, k1: int=BM25_K1) -> int:
+        raw_tf = self.get_tf(doc_id, term)
+        bm25_tf = (raw_tf * (k1 + 1)) / (raw_tf + k1)
+        return bm25_tf
     
     def get_documents(self, term: str) -> list:
         docs = list(self.index.get(term, set()))
