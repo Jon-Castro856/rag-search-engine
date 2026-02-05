@@ -5,7 +5,7 @@ import json
 import string
 from nltk import PorterStemmer
 from inverted_index import InvertedIndex
-from config import stop_word_file
+from config import stop_word_file, BM25_B
 
 
 
@@ -38,17 +38,17 @@ def main() -> None:
     bm25tf_parser = subparsers.add_parser("bm25tf", help="Retreive the BM25 term frequency score for a provided term within provided document id")
     bm25tf_parser.add_argument("docid", type=int, help="id of document to look through")
     bm25tf_parser.add_argument("term", type=str, help="term to search in document")
+    bm25tf_parser.add_argument("b", type=float, nargs='?', default=BM25_B, help="Tunable BM25 b parameter")
+
+    bm25search_parser = subparsers.add_parser("bm25search", help="Search movies using full BM25 scoring")
+    bm25search_parser.add_argument("query", type=str, help="Search query")
     args = parser.parse_args()
 
     index = InvertedIndex()
 
     match args.command:
         case "search":
-            try:
-                index.load()
-            except Exception as e:
-                print(f"error loading index: {e}")
-                return
+            load_index(index)
             
             query = format_query(args.query, stop_list)
             matches = check_match(query, index)
@@ -67,36 +67,27 @@ def main() -> None:
             print("index succesfully built and saved to disk")
 
         case "tf":
-            try:
-                index.load()
-            except Exception as e:
-                print(f"Error loading index: {e}")
-                return
+            load_index(index)
             id, term = args.id, args.term
             term_count = index.get_tf(id, term)
-            print(index.docmap[id])
+            doc = index.docmap[15]
+            print(doc["title"])
             print(f"Count of {term} in document {id}: {term_count}")
 
         case "idf":
-            try:
-                index.load()
-            except Exception as e:
-                print(f"error loading index: {e}")
+            load_index(index)
 
             score = index.get_term_frequency(args.term)
             print(f"frequency of {args.term}: {score:.2f}")
         
         case "tfidf":
-            try:
-                index.load()
-            except Exception as e:
-                print(f"error loading index: {e}")
+            load_index(index)
                 
             id, term = args.id, args.term
             tf = index.get_tf(id, term)
             idf = index.get_term_frequency(term)
             tf_idf = tf * idf
-            print(f"TF-IDF Score for {term} in document {id}: {tf_idf:.2f}")
+            print(f"TF-IDF Score for {term} in document {id}: {round(tf_idf)}")
 
         case "bm25idf":
             score = bm25_idf_command(args.term, index)
@@ -105,14 +96,26 @@ def main() -> None:
         case "bm25tf":
             score = bm25_tf_command(args.docid, args.term, index)
             print(f"Term Frequency score for {args.term} in {args.docid}: {score:.2f}")
+
+        case "bm25search":
+            query = args.query
+            load_index(index)
+
+            matches = index.bm25search(query)
+            print(f"Matches for {query}")
+            for match in matches:
+                print(match)
+
         case _:
             parser.print_help()
 
 
 def format_query(text: str, stop_words: list) -> list:
+    stemmer = PorterStemmer()
     splitted = text.split()
     tokens = [x.lower() for x in splitted if x != "" and x not in stop_words]
-    return tokens
+    stemmed_tokens = [stemmer.stem(x) for x in tokens]
+    return stemmed_tokens
 
 def check_match(query_tokens: list, index: InvertedIndex) -> list:
     stemmer = PorterStemmer()
@@ -130,21 +133,19 @@ def check_match(query_tokens: list, index: InvertedIndex) -> list:
     return match_list
 
 def bm25_idf_command(term: str, index: InvertedIndex) -> float:
-    try:
-        index.load()
-    except Exception as e:
-        print("error loading index: {e}")
-        return
+    load_index(index)
     return index.get_bm25_idf(term)
 
 def bm25_tf_command(docid: int, term: str,  index: InvertedIndex) -> float:
+    load_index(index)
+    return index.get_bm25_tf(docid, term)
+
+def load_index(index: InvertedIndex) -> None:
     try:
         index.load()
     except Exception as e:
-        print("error loading index: {e}")
+        print(f"error attemtping to load inex: {e}")
         return
-    return index.get_bm25_tf(docid, term)
-
 
 if __name__ == "__main__":
     main()
