@@ -60,12 +60,15 @@ class InvertedIndex:
         return count[token[0]]
     
     def get_bm25_tf(self, doc_id: int, term: str, k1: int=BM25_K1, b: int=BM25_B) -> float:
-        doc_length = self.doc_lengths[doc_id]
+        doc_length = self.doc_lengths.get(doc_id, 0)
         avg_doc_length = self._get_avg_doc_length()
-        length_norm = 1 - b + b * (doc_length / avg_doc_length)
+        if avg_doc_length > 0:
+            length_norm = 1 - b + b * (doc_length / avg_doc_length)
+        else:
+            length_norm = 0
 
         raw_tf = self.get_tf(doc_id, term)
-        bm25_tf = (raw_tf * (k1 + 1)) / (raw_tf + k1* length_norm)
+        bm25_tf = (raw_tf * (k1 + 1)) / (raw_tf + k1 * length_norm)
         return bm25_tf
     
     def get_documents(self, term: str) -> list:
@@ -91,9 +94,8 @@ class InvertedIndex:
             print("too many terms in argument")
             return
         doc_length = len(self.docmap)
-        hits = self.get_documents(text[0])
-        match_length = len(hits)
-        bm25_idf = math.log((doc_length - match_length + 0.5) / (match_length + 0.5) + 1)
+        hits = len(self.index[text[0]])
+        bm25_idf = math.log((doc_length - hits + 0.5) / (hits + 0.5) + 1)
         return bm25_idf 
 
     def bm25(self, doc_id: int, term: str) -> float:
@@ -126,12 +128,26 @@ class InvertedIndex:
         return results
 
     def format_text(self, text: str, stop_words: list) -> list:
+        text = text.lower()
+        text = text.translate(str.maketrans("", "", string.punctuation))
+        tokens = text.split()
+
+        valid_tokens = []
+        for token in tokens:
+            if token:
+                valid_tokens.append(token)
+        
+        filtered_words = []
+        for word in valid_tokens:
+            if word not in stop_words:
+                filtered_words.append(word)
+        
         stemmer = PorterStemmer()
-        punc_table = str.maketrans("", "", string.punctuation)
-        punc_removed = text.translate(punc_table).split()
-        tokens = [x.lower() for x in punc_removed if x not in stop_words]
-        stemmed_words = [stemmer.stem(x) for x in tokens]
+        stemmed_words = []
+        for word in filtered_words:
+            stemmed_words.append(stemmer.stem(word))
         return stemmed_words
+
 
     def build(self) -> None:
         print("compiling data...")
