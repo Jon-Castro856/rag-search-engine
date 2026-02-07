@@ -4,14 +4,14 @@ import json
 import string
 import math
 from nltk import PorterStemmer
-from collections import Counter
+from collections import Counter, defaultdict
 from config import BM25_K1, BM25_B, stop_word_file, movie_json, cache_dir
 
 class InvertedIndex:
     def __init__(self) -> None:
         self.index = {}
         self.docmap = {}
-        self.term_frequencies = {}
+        self.term_frequencies = defaultdict(Counter)
         self.doc_lengths = {}
 
         with open(stop_word_file, "r") as file:
@@ -27,13 +27,11 @@ class InvertedIndex:
         tokens = self.format_text(text, self.stop_words)
         token_count = len(tokens)
 
-        if doc_id not in self.doc_lengths.keys():
-            self.doc_lengths[doc_id] = token_count
+        self.doc_lengths[doc_id] = token_count
 
-        if doc_id not in self.term_frequencies.keys():
-                self.term_frequencies[doc_id] = Counter(tokens)
+        self.term_frequencies[doc_id].update(tokens)
 
-        for t in tokens:
+        for t in set(tokens):
             if t not in self.index.keys():
                 self.index[t] = set()
             self.index[t].add(doc_id)
@@ -120,9 +118,10 @@ class InvertedIndex:
         results = []
         for i in range(0, limit):
             id = sorted_matches[i][0]
-            score = sorted_matches[i][1]
+            score = round(sorted_matches[i][1], 2)
             movie_name = self.docmap[id]["title"]
-            result_string = f"{id} - {movie_name} - {round(score, 2)}"
+
+            result_string = f"{id} - {movie_name} - {score:.2f}"
             results.append(result_string)
 
         return results
