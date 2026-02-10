@@ -17,6 +17,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     subparsers.add_parser("build", help="Build the inverted index",)
+    subparsers.add_parser("test", help="test code")
 
     search_parser = subparsers.add_parser("search", help="Search movies using BM25")
     search_parser.add_argument("query", type=str, help="Search query")
@@ -50,7 +51,7 @@ def main() -> None:
         case "search":
             load_index(index)
             
-            query = format_query(args.query, stop_list)
+            query = format_text(args.query, stop_list)
             matches = check_match(query, index)
 
             print(f"searching for {args.query}")
@@ -106,16 +107,56 @@ def main() -> None:
             for match in matches:
                 print(match)
 
+        case "test":
+            load_index(index)
+            terms = "animated family"
+            print(f"Term: {terms}")
+            tokens = format_text(terms, stop_list)
+            movie = "Gakuen Alice"
+            mov_id = 2929
+            print(f"tokenized term: {tokens}")
+            print(f"Problem movie: {movie}")
+            for term in tokens:
+                tf = index.get_tf(mov_id, term)
+                idf = index.get_term_frequency(term)
+                tfidf = tf * idf
+                print(f"Scores for {term}")
+                print(f"TF: {tf}, idf: {idf:.2f}, tfidf: {tfidf:.2f}")
+            for term in tokens:
+                tf = index.get_bm25_tf(mov_id, term)
+                idf = index.get_bm25_idf(term)
+                tfidf = tf * idf
+                print(f"BM25 Scores for {term}")
+                print(f"TF: {tf}, idf: {idf}, tfidf: {tfidf}")
+
+            length = index.doc_lengths[mov_id]
+            print(f"movie doc length: {length}")
+            
+
         case _:
             parser.print_help()
 
 
-def format_query(text: str, stop_words: list) -> list:
-    stemmer = PorterStemmer()
-    splitted = text.split()
-    tokens = [x.lower() for x in splitted if x != "" and x not in stop_words]
-    stemmed_tokens = [stemmer.stem(x) for x in tokens]
-    return stemmed_tokens
+def format_text(text: str, stop_words: list) -> list:
+        text = text.lower()
+        text = text.translate(str.maketrans("", "", string.punctuation))
+        tokens = text.split()
+
+        valid_tokens = []
+        for token in tokens:
+            if token:
+                valid_tokens.append(token)
+        
+        filtered_words = []
+        for word in valid_tokens:
+            if word not in stop_words:
+                filtered_words.append(word)
+        
+        stemmer = PorterStemmer()
+        stemmed_words = []
+        for word in filtered_words:
+            stemmed_words.append(stemmer.stem(word))
+        return stemmed_words
 
 def check_match(query_tokens: list, index: InvertedIndex) -> list:
     stemmer = PorterStemmer()

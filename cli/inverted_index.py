@@ -25,9 +25,11 @@ class InvertedIndex:
 
     def _add_document(self, doc_id: int, text: str) -> None:
         tokens = self.format_text(text, self.stop_words)
-        token_count = len(tokens)
+        if doc_id == 2929:
+            print(tokens)
+            print(len(tokens))
 
-        self.doc_lengths[doc_id] = token_count
+        self.doc_lengths[doc_id] = len(tokens)
 
         self.term_frequencies[doc_id].update(tokens)
 
@@ -37,35 +39,33 @@ class InvertedIndex:
             self.index[t].add(doc_id)
 
     def _get_avg_doc_length(self) -> float:
-        doc_length = 0.0
-        total = 0.0
-        total_docs = len(self.doc_lengths)
-        if total_docs == 0:
+        if not self.doc_lengths or len(self.doc_lengths) == 0:
             return 0.0
-
-        for text in self.doc_lengths.keys():
-            total += self.doc_lengths[text]
-
-        doc_length = total / total_docs
-        return doc_length
+        total = 0.0
+        for length in self.doc_lengths.values():
+            print(length)
+            total += length
+        print(self.doc_lengths[1])
+        return total / len(self.doc_lengths)
 
     def get_tf(self, doc_id: int, term: str) -> int:
         token = self.format_text(term, self.stop_words)
         if len(token) > 1:
             raise Exception("too many arguments for command")
-        
-        count = self.term_frequencies.get(doc_id, 0)
-        return count[token[0]]
+        text = token[0]
+        return self.term_frequencies[doc_id][text]
     
     def get_bm25_tf(self, doc_id: int, term: str, k1: int=BM25_K1, b: int=BM25_B) -> float:
+        raw_tf = self.get_tf(doc_id, term)
         doc_length = self.doc_lengths.get(doc_id, 0)
         avg_doc_length = self._get_avg_doc_length()
+        print(doc_length, avg_doc_length)
         if avg_doc_length > 0:
             length_norm = 1 - b + b * (doc_length / avg_doc_length)
         else:
             length_norm = 0
 
-        raw_tf = self.get_tf(doc_id, term)
+        
         bm25_tf = (raw_tf * (k1 + 1)) / (raw_tf + k1 * length_norm)
         return bm25_tf
     
@@ -79,9 +79,9 @@ class InvertedIndex:
         if len(text) > 1:
             print("too many terms in argument")
             return
+        token = text[0]
         doc_length = len(self.docmap)
-        hits = self.get_documents(text[0])
-        match_length = len(hits)
+        match_length = len(self.index[token])
 
         frequency = math.log((doc_length + 1) / (match_length + 1))
         return frequency
