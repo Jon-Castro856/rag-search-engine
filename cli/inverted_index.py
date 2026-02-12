@@ -5,9 +5,9 @@ import string
 import math
 from nltk import PorterStemmer
 from collections import Counter, defaultdict
-from config import BM25_K1, BM25_B, stop_word_file, movie_json, cache_dir
+from cli.config import BM25_K1, BM25_B, stop_word_file, movie_json, cache_dir
 
-class InvertedIndex:
+class MyInvertedIndex:
     def __init__(self) -> None:
         self.index = {}
         self.docmap = {}
@@ -25,9 +25,6 @@ class InvertedIndex:
 
     def _add_document(self, doc_id: int, text: str) -> None:
         tokens = self.format_text(text, self.stop_words)
-        if doc_id == 2929:
-            print(tokens)
-            print(len(tokens))
 
         self.doc_lengths[doc_id] = len(tokens)
 
@@ -159,6 +156,7 @@ class InvertedIndex:
             doc_id = movie["id"]
             self._add_document(doc_id, conatenated_movie_text)
             self.docmap[doc_id] = movie
+        print("data built")
 
     def save(self) -> None:
         print("saving data to disk...")

@@ -4,7 +4,7 @@ import argparse
 import json
 import string
 from nltk import PorterStemmer
-from inverted_index import InvertedIndex
+from inverted_index import MyInvertedIndex
 from config import stop_word_file, BM25_B
 
 
@@ -45,7 +45,7 @@ def main() -> None:
     bm25search_parser.add_argument("query", type=str, help="Search query")
     args = parser.parse_args()
 
-    index = InvertedIndex()
+    index = MyInvertedIndex()
 
     match args.command:
         case "search":
@@ -158,7 +158,7 @@ def format_text(text: str, stop_words: list) -> list:
             stemmed_words.append(stemmer.stem(word))
         return stemmed_words
 
-def check_match(query_tokens: list, index: InvertedIndex) -> list:
+def check_match(query_tokens: list, index: MyInvertedIndex) -> list:
     stemmer = PorterStemmer()
     match_list, hit = [], []
     for query in query_tokens:
@@ -173,15 +173,15 @@ def check_match(query_tokens: list, index: InvertedIndex) -> list:
         match_list.append(index.docmap[id])
     return match_list
 
-def bm25_idf_command(term: str, index: InvertedIndex) -> float:
+def bm25_idf_command(term: str, index: MyInvertedIndex) -> float:
     load_index(index)
     return index.get_bm25_idf(term)
 
-def bm25_tf_command(docid: int, term: str,  index: InvertedIndex) -> float:
+def bm25_tf_command(docid: int, term: str,  index: MyInvertedIndex) -> float:
     load_index(index)
     return index.get_bm25_tf(docid, term)
 
-def load_index(index: InvertedIndex) -> None:
+def load_index(index: MyInvertedIndex) -> None:
     try:
         index.load()
     except Exception as e:
