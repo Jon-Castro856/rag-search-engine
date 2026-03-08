@@ -1,192 +1,131 @@
 #!/usr/bin/env python3
 
 import argparse
-import json
-import string
-from nltk import PorterStemmer
-from inverted_index import MyInvertedIndex
-from config import stop_word_file, BM25_B
 
+from lib.keyword_search import (
+    bm25_idf_command,
+    bm25_tf_command,
+    bm25search_command,
+    build_command,
+    idf_command,
+    search_command,
+    tf_command,
+    tfidf_command,
+)
+from lib.search_utils import BM25_B, BM25_K1
 
 
 def main() -> None:
-    with open(stop_word_file, "r") as file:
-        stop_words = file.read()
-        stop_list = stop_words.splitlines()
-    
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
-    subparsers.add_parser("build", help="Build the inverted index",)
+
+    subparsers.add_parser("build", help="Build the inverted index")
     subparsers.add_parser("test", help="test code")
 
     search_parser = subparsers.add_parser("search", help="Search movies using BM25")
     search_parser.add_argument("query", type=str, help="Search query")
 
-    term_parser = subparsers.add_parser("tf", help="Display frequency of given term in provided movie ID")
-    term_parser.add_argument("id", type=int, help="Document ID")
-    term_parser.add_argument("term", type=str, help="Frequency query")
+    tf_parser = subparsers.add_parser(
+        "tf", help="Get term frequency for a given document ID and term"
+    )
+    tf_parser.add_argument("doc_id", type=int, help="Document ID")
+    tf_parser.add_argument("term", type=str, help="Term to get frequency for")
 
-    idf_parser = subparsers.add_parser("idf", help="Obtain frequency score of provided search term")
-    idf_parser.add_argument("term", type=str, help="term to search")
+    idf_parser = subparsers.add_parser(
+        "idf", help="Get inverse document frequency for a given term"
+    )
+    idf_parser.add_argument("term", type=str, help="Term to get IDF for")
 
-    tfidf_parser = subparsers.add_parser("tfidf", help="Obtain the combined term and inverse index frequency of provided term in provided doc id")
-    tfidf_parser.add_argument("id", type=int, help="document id")
-    tfidf_parser.add_argument("term", type=str, help="term to search")
+    tf_idf_parser = subparsers.add_parser(
+        "tfidf", help="Get TF-IDF score for a given document ID and term"
+    )
+    tf_idf_parser.add_argument("doc_id", type=int, help="Document ID")
+    tf_idf_parser.add_argument("term", type=str, help="Term to get TF-IDF score for")
 
-    bm25idf_parser = subparsers.add_parser("bm25idf", help="Obtain the BM25 IDF score for the provided search term")
-    bm25idf_parser.add_argument("term", type=str, help="term to acquire score for")
+    bm25_idf_parser = subparsers.add_parser(
+        "bm25idf", help="Get BM25 IDF score for a given term"
+    )
+    bm25_idf_parser.add_argument(
+        "term", type=str, help="Term to get BM25 IDF score for"
+    )
 
-    bm25tf_parser = subparsers.add_parser("bm25tf", help="Retreive the BM25 term frequency score for a provided term within provided document id")
-    bm25tf_parser.add_argument("docid", type=int, help="id of document to look through")
-    bm25tf_parser.add_argument("term", type=str, help="term to search in document")
-    bm25tf_parser.add_argument("b", type=float, nargs='?', default=BM25_B, help="Tunable BM25 b parameter")
+    bm25_tf_parser = subparsers.add_parser(
+        "bm25tf", help="Get BM25 TF score for a given document ID and term"
+    )
+    bm25_tf_parser.add_argument("doc_id", type=int, help="Document ID")
+    bm25_tf_parser.add_argument("term", type=str, help="Term to get BM25 TF score for")
+    bm25_tf_parser.add_argument(
+        "k1", type=float, nargs="?", default=BM25_K1, help="Tunable BM25 K1 parameter"
+    )
+    bm25_tf_parser.add_argument(
+        "b", type=float, nargs="?", default=BM25_B, help="Tunable BM25 b parameter"
+    )
 
-    bm25search_parser = subparsers.add_parser("bm25search", help="Search movies using full BM25 scoring")
+    bm25search_parser = subparsers.add_parser(
+        "bm25search", help="Search movies using full BM25 scoring"
+    )
     bm25search_parser.add_argument("query", type=str, help="Search query")
+
     args = parser.parse_args()
 
-    index = MyInvertedIndex()
-
     match args.command:
-        case "search":
-            load_index(index)
-            
-            query = format_text(args.query, stop_list)
-            matches = check_match(query, index)
-
-            print(f"searching for {args.query}")
-            if not matches:
-                print("no matches found")
-                return
-            for match in matches:
-                print("assault" in match["description"])
-                print(f"ID: {match["id"]}\nName: {match["title"]}")
-
         case "build":
-            index.build()
-            index.save()
-            print("index succesfully built and saved to disk")
-
+            print("Building inverted index...")
+            build_command()
+            print("Inverted index built successfully.")
+        case "search":
+            print("Searching for:", args.query)
+            results = search_command(args.query)
+            for i, res in enumerate(results, 1):
+                print(f"{i}. ({res['id']}) {res['title']}")
         case "tf":
-            load_index(index)
-            id, term = args.id, args.term
-            term_count = index.get_tf(id, term)
-            doc = index.docmap[15]
-            print(doc["title"])
-            print(f"Count of {term} in document {id}: {term_count}")
-
+            tf = tf_command(args.doc_id, args.term)
+            print(f"Term frequency of '{args.term}' in document '{args.doc_id}': {tf}")
         case "idf":
-            load_index(index)
-
-            score = index.get_term_frequency(args.term)
-            print(f"frequency of {args.term}: {score:.2f}")
-        
+            idf = idf_command(args.term)
+            print(f"Inverse document frequency of '{args.term}': {idf:.2f}")
         case "tfidf":
-            load_index(index)
-                
-            id, term = args.id, args.term
-            tf = index.get_tf(id, term)
-            idf = index.get_term_frequency(term)
-            tf_idf = tf * idf
-            print(f"TF-IDF Score for {term} in document {id}: {round(tf_idf)}")
-
+            tf_idf = tfidf_command(args.doc_id, args.term)
+            print(
+                f"TF-IDF score of '{args.term}' in document '{args.doc_id}': {tf_idf:.2f}"
+            )
         case "bm25idf":
-            score = bm25_idf_command(args.term, index)
-            print(f"score for {args.term}: {score:.2f}")
-
+            bm25idf = bm25_idf_command(args.term)
+            print(f"BM25 IDF score of '{args.term}': {bm25idf:.2f}")
         case "bm25tf":
-            score = bm25_tf_command(args.docid, args.term, index)
-            print(f"Term Frequency score for {args.term} in {args.docid}: {score:.2f}")
-
+            bm25tf = bm25_tf_command(args.doc_id, args.term, args.k1)
+            print(
+                f"BM25 TF score of '{args.term}' in document '{args.doc_id}': {bm25tf:.2f}"
+            )
         case "bm25search":
-            query = args.query
-            load_index(index)
-
-            matches = index.bm25search(query)
-            print(f"Matches for {query}")
-            for match in matches:
-                print(match)
-
+            print("Searching for:", args.query)
+            results = bm25search_command(args.query)
+            for i, res in enumerate(results, 1):
+                print(f"{i}. ({res['id']}) {res['title']} - Score: {res['score']:.2f}")
         case "test":
-            load_index(index)
             terms = "animated family"
             print(f"Term: {terms}")
-            tokens = format_text(terms, stop_list)
+            tokens = ['anim', 'famili']
             movie = "Gakuen Alice"
             mov_id = 2929
             print(f"tokenized term: {tokens}")
             print(f"Problem movie: {movie}")
             for term in tokens:
-                tf = index.get_tf(mov_id, term)
-                idf = index.get_term_frequency(term)
+                tf = tf_command(mov_id, term)
+                idf = idf_command(term)
                 tfidf = tf * idf
                 print(f"Scores for {term}")
                 print(f"TF: {tf}, idf: {idf:.2f}, tfidf: {tfidf:.2f}")
             for term in tokens:
-                tf = index.get_bm25_tf(mov_id, term)
-                idf = index.get_bm25_idf(term)
+                tf = bm25_tf_command(mov_id, term)
+                idf = bm25_idf_command(term)
                 tfidf = tf * idf
                 print(f"BM25 Scores for {term}")
                 print(f"TF: {tf}, idf: {idf}, tfidf: {tfidf}")
 
-            length = index.doc_lengths[mov_id]
-            print(f"movie doc length: {length}")
-            
-
         case _:
             parser.print_help()
 
-
-def format_text(text: str, stop_words: list) -> list:
-        text = text.lower()
-        text = text.translate(str.maketrans("", "", string.punctuation))
-        tokens = text.split()
-
-        valid_tokens = []
-        for token in tokens:
-            if token:
-                valid_tokens.append(token)
-        
-        filtered_words = []
-        for word in valid_tokens:
-            if word not in stop_words:
-                filtered_words.append(word)
-        
-        stemmer = PorterStemmer()
-        stemmed_words = []
-        for word in filtered_words:
-            stemmed_words.append(stemmer.stem(word))
-        return stemmed_words
-
-def check_match(query_tokens: list, index: MyInvertedIndex) -> list:
-    stemmer = PorterStemmer()
-    match_list, hit = [], []
-    for query in query_tokens:
-        q = stemmer.stem(query)
-        print(q)
-        hit.extend(index.get_documents(q))
-
-    hit.sort()
-    for id in hit:
-        if len(match_list) == 5:
-            return match_list
-        match_list.append(index.docmap[id])
-    return match_list
-
-def bm25_idf_command(term: str, index: MyInvertedIndex) -> float:
-    load_index(index)
-    return index.get_bm25_idf(term)
-
-def bm25_tf_command(docid: int, term: str,  index: MyInvertedIndex) -> float:
-    load_index(index)
-    return index.get_bm25_tf(docid, term)
-
-def load_index(index: MyInvertedIndex) -> None:
-    try:
-        index.load()
-    except Exception as e:
-        print(f"error attemtping to load inex: {e}")
-        return
 
 if __name__ == "__main__":
     main()
