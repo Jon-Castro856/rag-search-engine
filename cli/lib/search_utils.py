@@ -13,6 +13,7 @@ DATA_PATH = os.path.join(PROJECT_ROOT, "data", "movies.json")
 STOPWORDS_PATH = os.path.join(PROJECT_ROOT, "data", "stopwords.txt")
 
 CACHE_DIR = os.path.join(PROJECT_ROOT, "cache")
+EMBED_PATH = os.path.join(CACHE_DIR, "movie_embeddings.npy")
 
 
 def load_movies() -> list[dict]:
