@@ -34,6 +34,7 @@ class SemanticSearch:
     
     def load_or_create_embeddings(self, documents: dict):
         self.documents = documents
+
         for doc in self.documents:
             id = doc["id"]
             self.doc_map[id] = doc
@@ -47,6 +48,31 @@ class SemanticSearch:
         else:
             self.embeddings = self.build_embeddings(documents)
         return self.embeddings(documents)
+    
+    def search(self, query: str, limit: int) -> list[dict]:
+        if self.embeddings is None:
+            raise ValueError("No embeddings loaded. Call `load_or_create_embeddings` first.")
+        
+        query_embedding = self.generate_embedding(query)
+        results = []
+        for i, movie_embedding in enumerate(self.embeddings):
+            cs = cosine_similarity(query_embedding, movie_embedding)
+            results.append((cs, self.doc_map[i+1]))
+
+        results.sort(key = lambda x: x[0], reverse=True)
+        search_results = []
+        for i in range(limit):
+            score = results[i][0]
+            id = results[i][1]["id"]
+            title = self.doc_map[id]["title"]
+            description = self.doc_map[id]["description"][:50] + "..."
+            movie = {"score": round(score, 3),
+                     "title": title,
+                     "description": description}
+            
+            search_results.append(movie)
+            
+        return search_results 
 
 def verify_model() -> None:
     semantic_model = SemanticSearch()
@@ -65,6 +91,24 @@ def verify_embeddings() -> None:
     model = SemanticSearch()
     movies = load_movies()
     embeddings = model.load_or_create_embeddings(movies)
+    print(model.doc_map.keys())
     print(f"Number of docs:   {len(movies)}")
     print(f"Embeddings shape: {embeddings.shape[0]} vectors in {embeddings.shape[1]} dimensions")
-    
+
+def embed_text(query: str) -> None:
+    model = SemanticSearch()
+    embedding = model.generate_embedding(query)
+
+    print(f"Query: {query}")
+    print(f"First 5 dimensions: {embedding[:5]}")
+    print(f"Shape: {embedding.shape}")
+
+def cosine_similarity(vec1, vec2) -> float:
+    dot_product = np.dot(vec1, vec2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+
+    return dot_product / (norm1 * norm2)
