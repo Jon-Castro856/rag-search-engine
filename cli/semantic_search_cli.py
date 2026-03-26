@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 import argparse
-from lib.semantic_search import SemanticSearch, verify_model, embed_text, verify_embeddings, embed_text
+from lib.semantic_search import SemanticSearch, ChunkedSemanticSearch, verify_model, embed_text, verify_embeddings, embed_text, chunk_text, semantic_chunk_text
 from lib.search_utils import load_movies
-import re
+
 
 def main():
     
@@ -12,12 +12,14 @@ def main():
 
     subparsers.add_parser("verify", help="verify creation of semantic search model")
     subparsers.add_parser("verify_embeddings", help="verify embeddings")
+    subparsers.add_parser("embed_chunks", help="embed and encode chunks")
 
     embedder = subparsers.add_parser("embed_text", help="perform text embedding")
     embedder.add_argument("text", type=str, help="text to be embedded")
 
     embed_query = subparsers.add_parser("embedquery", help="perform text embedding on specified query")
     embed_query.add_argument("query", type=str, help="query to embed")
+    
 
     search = subparsers.add_parser("search", help="search through movie documents with provided query, with optional limit")
     search.add_argument("query", type=str, help="query to search")
@@ -55,40 +57,24 @@ def main():
                 print(f"{entry["title"]} (Score: {entry["score"]:.2f})")
                 print(f"{entry["description"]}")
         case "chunk":
-            limit = args.chunk_size
-            words = args.text.split()
-            overlap = args.overlap
             length = len(args.text)
-            chunks = []
-            for i in range(0, len(words), limit):
-                if i != 0:
-                    i -= overlap
-                chunk = words[i:i+limit]
-                chunks.append(" ".join(chunk))
-                
-                i += limit - 1
+            chunks = chunk_text(args.text.split(), args.chunk_size, args.overlap)
 
             print(f"Chunking {length} characters")
             for i in range(0, len(chunks)):
                 print(f"{i+1}. {chunks[i]}")
         case "semantic_chunk":
             length = len(args.text)
-            limit = args.max_chunk_size
-            overlap = args.overlap
-            words = re.split(r"(?<=[.!?])\s+", args.text)
-
-            chunks = []
-            for i in range(0, len(words), limit):
-                if i != 0:
-                    i -= overlap
-                chunk = words[i:i+limit]
-                chunks.append(" ".join(chunk))
-                
-                i += limit - 1
+            chunks = semantic_chunk_text(args.text, args.max_chunk_size, args.overlap)
 
             print(f"Semantically chunking {length} characters")
             for i in range(0, len(chunks)):
                 print(f"{i+1}. {chunks[i]}")
+        case 'embed_chunks':
+            documents = load_movies()
+            chunksearch = ChunkedSemanticSearch()
+            embeddings = chunksearch.load_or_create_chunk_embeddings(documents)
+            print(f"Generated {len(embeddings)} chunked embeddings")
       
         case _:
             parser.print_help()

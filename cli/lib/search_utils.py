@@ -14,6 +14,8 @@ STOPWORDS_PATH = os.path.join(PROJECT_ROOT, "data", "stopwords.txt")
 
 CACHE_DIR = os.path.join(PROJECT_ROOT, "cache")
 EMBED_PATH = os.path.join(CACHE_DIR, "movie_embeddings.npy")
+CHUNK_EMBEDS = os.path.join(CACHE_DIR, "chunk_embeddings.npy")
+CHUNK_METADATA = os.path.join(CACHE_DIR, "chunk_metadata.json")
 
 
 def load_movies() -> list[dict]:

@@ -1,11 +1,13 @@
 import os
+import re
+import json
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from .search_utils import EMBED_PATH, load_movies
+from .search_utils import EMBED_PATH, CHUNK_EMBEDS, CHUNK_METADATA, load_movies
 
 class SemanticSearch:
-    def __init__(self) -> None:
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+    def __init__(self, model_name="all-MiniLM-L6-v2") -> None:
+        self.model = SentenceTransformer(model_name)
         self.embeddings = None
         self.documents = None
         self.doc_map = {}
@@ -73,6 +75,69 @@ class SemanticSearch:
             search_results.append(movie)
             
         return search_results 
+    
+class ChunkedSemanticSearch(SemanticSearch):
+    def __init__(self, model_name="all-MiniLM-L6-v2") -> None:
+        super().__init__(model_name)
+        self.chunk_embeddings = None
+        self.chunk_metadata = None
+    
+    def build_chunk_embeddings(self, documents: dict) -> np.ndarray:
+        self.documents = documents
+        chunks = []
+        metadata = []
+        for doc in documents:
+            id = doc["id"]
+            self.doc_map[id] = doc
+            if doc["description"] == "":
+                continue
+            chunk = semantic_chunk_text(doc["description"], 4, 1)
+            i = 0
+            for c in chunk:
+                chunks.append(c)
+                metadata.append({"movie_idx": id,
+                               "chunk_idx": i,
+                               "total_chunks": len(chunk)})
+                i += 1
+        self.chunk_embeddings = self.model.encode(chunks, show_progress_bar=True)
+        self.chunk_metadata = metadata
+
+        os.makedirs(os.path.dirname(CHUNK_EMBEDS), exist_ok=True)
+        np.save(CHUNK_EMBEDS, self.chunk_embeddings)
+        with open(CHUNK_METADATA, "w") as f:
+            json.dump({"chunks": metadata, "total_chunks": len(chunks)}, f, indent=2)
+
+        return self.chunk_embeddings
+    
+    def load_or_create_chunk_embeddings(self, documents: dict) -> np.ndarray:
+        self.documents = documents
+        for doc in documents:
+            id = doc["id"]
+            self.doc_map[id] = doc
+
+            if os.path.exists(CHUNK_EMBEDS) and os.path.exists(CHUNK_METADATA):
+                self.chunk_embeddings = np.load(CHUNK_EMBEDS)
+                with open(CHUNK_METADATA, "r") as f:
+                    self.chunk_metadata = json.load(f)
+            else:
+                self.chunk_embeddings = self.build_chunk_embeddings(documents)
+        return self.chunk_embeddings
+    
+    def chunk_search(self, query: str, limit: int = 10):
+        if self.chunk_embeddings is None:
+            raise ValueError("no embedded generated, call load_or_create_chunk_embeddings first")
+        
+        query_embedding = self.generate_embedding(query)
+        chunk_score = []
+        for i, embedding in enumerate(self.chunk_embeddings):
+            
+            cs = cosine_similarity(query_embedding, embedding)
+
+            chunk_score.append({"chunk_idx": 1,
+                                "movie_idx: 1,"
+                                "score": cs})
+        pass
+        
 
 def verify_model() -> None:
     semantic_model = SemanticSearch()
@@ -112,3 +177,31 @@ def cosine_similarity(vec1, vec2) -> float:
         return 0.0
 
     return dot_product / (norm1 * norm2)
+
+def chunk_text(words: list[str], limit: int, overlap: int) -> list[str]:
+    n_words = len(words)
+    i = 0
+    chunks = []
+
+    while i < n_words:
+        chunk = words[i:i+limit]
+        if chunks and len(chunk) <= overlap:
+            break
+        chunks.append(" ".join(chunk))
+        i += limit - overlap
+
+    return chunks
+
+def semantic_chunk_text(text: str, limit: int, overlap: int) -> list[str]:
+    words = re.split(r"(?<=[.!?])\s+", text)
+    n_words = len(words)
+    chunks = []
+    i = 0
+
+    while i < n_words:
+        chunk = words[i:i+limit]
+        if chunks and len(chunk) <= overlap:
+            break
+        chunks.append(" ".join(chunk))
+        i += limit - overlap
+    return chunks
