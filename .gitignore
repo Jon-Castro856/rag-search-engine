@@ -11,3 +11,5 @@ wheels/
 /chunk_metadata.json
 # Virtual environments
 .venv
+cache/chunk_embeddings.npy
+cache/chunk_metadata.json
