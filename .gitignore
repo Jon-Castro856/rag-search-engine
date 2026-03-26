@@ -8,5 +8,6 @@ wheels/
 /data/
 /solution_code/
 /chunk_embeddings.npy
+/chunk_metadata.json
 # Virtual environments
 .venv
