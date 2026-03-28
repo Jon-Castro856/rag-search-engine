@@ -3,7 +3,7 @@ import re
 import json
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from .search_utils import EMBED_PATH, CHUNK_EMBEDS, CHUNK_METADATA, load_movies
+from .search_utils import EMBED_PATH, CHUNK_EMBEDS, CHUNK_METADATA, load_movies, format_search_result
 
 class SemanticSearch:
     def __init__(self, model_name="all-MiniLM-L6-v2") -> None:
@@ -123,20 +123,41 @@ class ChunkedSemanticSearch(SemanticSearch):
                 self.chunk_embeddings = self.build_chunk_embeddings(documents)
         return self.chunk_embeddings
     
-    def chunk_search(self, query: str, limit: int = 10):
+    def chunk_search(self, query: str, limit: int = 10) -> list[dict]:
         if self.chunk_embeddings is None:
             raise ValueError("no embedded generated, call load_or_create_chunk_embeddings first")
         
         query_embedding = self.generate_embedding(query)
         chunk_score = []
         for i, embedding in enumerate(self.chunk_embeddings):
-            
+            metadata = self.chunk_metadata["chunks"][i]
             cs = cosine_similarity(query_embedding, embedding)
 
-            chunk_score.append({"chunk_idx": 1,
-                                "movie_idx: 1,"
+            chunk_score.append({"chunk_idx": metadata["chunk_idx"],
+                                "movie_idx": metadata["movie_idx"],
                                 "score": cs})
-        pass
+        movie_scores = {}
+        for score in chunk_score:
+            id = score["movie_idx"]
+            c_score = score["score"]
+            if score["movie_idx"] not in movie_scores:
+                movie_scores[id] = c_score
+            elif movie_scores[id] < c_score:
+                movie_scores[id] = c_score
+            
+        sorted_movies = sorted(movie_scores.items(), key=lambda item: item[1], reverse=True)
+        results = []
+        i = 0
+        while i < limit:
+            id = sorted_movies[i][0]
+            title = self.doc_map[id]["title"]
+            description = self.doc_map[id]["description"][:100]
+            score = sorted_movies[i][1]
+            m = next((item for item in chunk_score if item["score"] == score), None)
+            results.append(format_search_result(id, title, description, score))
+            i += 1
+
+        return results
         
 
 def verify_model() -> None:
@@ -193,15 +214,22 @@ def chunk_text(words: list[str], limit: int, overlap: int) -> list[str]:
     return chunks
 
 def semantic_chunk_text(text: str, limit: int, overlap: int) -> list[str]:
-    words = re.split(r"(?<=[.!?])\s+", text)
+    strip_words = text.strip()
+    if strip_words == "":
+        return []
+    
+    words = re.split(r"(?<=[.!?])\s+", strip_words)
+    if len(words) == 1 and not text.endswith(".", "!", "?"):
+        words = [text]
+
     n_words = len(words)
     chunks = []
     i = 0
-
     while i < n_words:
         chunk = words[i:i+limit]
         if chunks and len(chunk) <= overlap:
             break
-        chunks.append(" ".join(chunk))
+        stripped = [x.strip() for x in chunk]
+        chunks.append(" ".join(stripped))
         i += limit - overlap
     return chunks

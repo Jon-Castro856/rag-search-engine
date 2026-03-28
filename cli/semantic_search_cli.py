@@ -34,6 +34,10 @@ def main():
     semantic_chunk.add_argument("text", type=str, help="text to be split")
     semantic_chunk.add_argument("--max-chunk-size", type=int, default=4, help="limit on how big each 'chunk' should be")
     semantic_chunk.add_argument("--overlap", type=int, default=0, help="number of characters that should 'overlap' between each chunk")
+
+    search_chunked = subparsers.add_parser("search_chunked", help="perform a chunked semantic search to find matching movies")
+    search_chunked.add_argument("query", type=str, help="query to search")
+    search_chunked.add_argument("--limit", type=int, default=5, help="max number of movies to show")
     args = parser.parse_args()
     
 
@@ -75,7 +79,18 @@ def main():
             chunksearch = ChunkedSemanticSearch()
             embeddings = chunksearch.load_or_create_chunk_embeddings(documents)
             print(f"Generated {len(embeddings)} chunked embeddings")
-      
+        case "search_chunked":
+            movies = load_movies()
+            search_model = ChunkedSemanticSearch()
+            search_model.load_or_create_chunk_embeddings(movies)
+            results = search_model.chunk_search(args.query, args.limit)
+
+            for i, res in enumerate(results):
+                TITLE = res["title"]
+                SCORE = res["score"]
+                DOCUMENT = res["document"]
+                print(f"\n{i}. {TITLE} (score: {SCORE:.4f})")
+                print(f"   {DOCUMENT}...")
         case _:
             parser.print_help()
 
