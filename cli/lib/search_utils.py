@@ -4,6 +4,7 @@ from typing import Any
 
 DEFAULT_SEARCH_LIMIT = 5
 SCORE_PRECISION = 3
+DOCUMENT_PREVIEW_LENGTH = 100
 
 BM25_K1 = 1.5
 BM25_B = 0.75
@@ -50,4 +51,4 @@ def format_search_result(
         "document": document,
         "score": round(score, SCORE_PRECISION),
         "metadata": metadata if metadata else {},
-    }
+    } 
