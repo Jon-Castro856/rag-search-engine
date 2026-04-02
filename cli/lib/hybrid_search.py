@@ -18,9 +18,11 @@ class HybridSearch:
         return self.idx.bm25_search(query, limit)
     
     def weighted_search(self, query: str, alpha, limit: int= 5):
-        bm25score = self._bm25search(query, limit)
-        semscore = self.semantic_search.chunk_search(query, limit)
-        print(bm25score[0], semscore[0])
+        bm25scores = self._bm25search(query, limit * 500)
+        semscore = self.semantic_search.chunk_search(query, limit * 500)
+        bm25_norms = normalize_score(bm25scores)
+        sem_norms = normalize_score(semscore)
+        
         pass    
     
     def rrf_search(self, query, k, limit=10):
