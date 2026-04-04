@@ -27,6 +27,7 @@ def main() -> None:
             query = args.query
             alpha = args.alpha
             limit = args.limit
+            model.semantic_search.load_or_create_chunk_embeddings(movies)
             results = model.weighted_search(query, alpha, limit)
 
         case _:

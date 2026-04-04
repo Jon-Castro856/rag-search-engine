@@ -109,11 +109,12 @@ class ChunkedSemanticSearch(SemanticSearch):
 
         return self.chunk_embeddings
     
-    def load_or_create_chunk_embeddings(self, documents: dict) -> np.ndarray:
+    def load_or_create_chunk_embeddings(self, documents: list[dict]) -> np.ndarray:
         self.documents = documents
+        self.doc_map = {}
         for doc in documents:
             id = doc["id"]
-            self.doc_map[id] = doc
+            self.doc_map[doc["id"]] = doc
 
             if os.path.exists(CHUNK_EMBEDS) and os.path.exists(CHUNK_METADATA):
                 self.chunk_embeddings = np.load(CHUNK_EMBEDS)
@@ -125,28 +126,34 @@ class ChunkedSemanticSearch(SemanticSearch):
         return self.chunk_embeddings
     
     def chunk_search(self, query: str, limit: int = 10) -> list[dict]:
-        if self.chunk_embeddings is None:
-            raise ValueError("no embedded generated, call load_or_create_chunk_embeddings first")
-        
-       
-        query_embedding = self.generate_embedding(query)
-        chunk_score = []
-        for i, embedding in enumerate(self.chunk_embeddings):
-            cs = cosine_similarity(query_embedding, embedding)
+        if self.chunk_embeddings is None or self.chunk_metadata is None:
+            raise ValueError(
+                "No chunk embeddings loaded. Call load_or_create_chunk_embeddings first."
+            )
 
-            chunk_score.append({
-                "chunk_idx": i,
-                "movie_idx": self.chunk_metadata[i]["movie_idx"],
-                "score": cs,
-            })
-        
+        query_embedding = self.generate_embedding(query)
+
+        chunk_scores = []
+        for i, chunk_embedding in enumerate(self.chunk_embeddings):
+            similarity = cosine_similarity(query_embedding, chunk_embedding)
+            chunk_scores.append(
+                {
+                    "chunk_idx": i,
+                    "movie_idx": self.chunk_metadata[i]["movie_idx"],
+                    "score": similarity,
+                }
+            )
+
         movie_scores = {}
-        for cs in chunk_score:
-            movie_idx = cs["movie_idx"]
-            if movie_idx not in movie_scores or cs["score"] > movie_scores[movie_idx]:
-                movie_scores[movie_idx] = cs["score"]
-        
-        sorted_movies = sorted(movie_scores.items(), key = lambda x: x[1], reverse=True)
+        for chunk_score in chunk_scores:
+            movie_idx = chunk_score["movie_idx"]
+            if (
+                movie_idx not in movie_scores
+                or chunk_score["score"] > movie_scores[movie_idx]
+            ):
+                movie_scores[movie_idx] = chunk_score["score"]
+
+        sorted_movies = sorted(movie_scores.items(), key=lambda x: x[1], reverse=True)
 
         results = []
         for movie_idx, score in sorted_movies[:limit]:
@@ -154,11 +161,14 @@ class ChunkedSemanticSearch(SemanticSearch):
                 continue
             doc = self.documents[movie_idx]
             results.append(
-                format_search_result(doc_id=doc["id"],
-                                     title=doc["title"],
-                                     document=doc["description"][:DOCUMENT_PREVIEW_LENGTH],
-                                     score=score)
+                format_search_result(
+                    doc_id=doc["id"],
+                    title=doc["title"],
+                    document=doc["description"][:DOCUMENT_PREVIEW_LENGTH],
+                    score=score,
+                )
             )
+
         return results
         
 
