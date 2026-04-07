@@ -30,6 +30,12 @@ def main() -> None:
             model.semantic_search.load_or_create_chunk_embeddings(movies)
             results = model.weighted_search(query, alpha, limit)
 
+            for i, res in enumerate(results):
+                print(f"{i+1}. {res["title"]}")
+                print(f"Hybrid Score: {res["score"]}")
+                print(f"BM25: {res["metadata"]["bm25score"]}, Semantic: {res["metadata"]["semscore"]}")
+                print(f"{res["document"]}...")
+
         case _:
             parser.print_help()
 

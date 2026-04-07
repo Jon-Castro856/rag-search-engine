@@ -157,6 +157,7 @@ class ChunkedSemanticSearch(SemanticSearch):
 
         results = []
         for movie_idx, score in sorted_movies[:limit]:
+            print(movie_idx)
             if movie_idx is None:
                 continue
             doc = self.documents[movie_idx]
