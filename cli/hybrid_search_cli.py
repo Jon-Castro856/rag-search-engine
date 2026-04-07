@@ -24,10 +24,9 @@ def main() -> None:
         case "weighted-search":
             movies = load_movies()
             model = HybridSearch(movies)
-            query = args.query
-            alpha = args.alpha
-            limit = args.limit
-            model.semantic_search.load_or_create_chunk_embeddings(movies)
+            query, alpha, limit = args.query, args.alpha, args.limit
+            
+
             results = model.weighted_search(query, alpha, limit)
 
             for i, res in enumerate(results):

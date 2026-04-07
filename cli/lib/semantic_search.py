@@ -3,7 +3,7 @@ import re
 import json
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from .search_utils import EMBED_PATH, CHUNK_EMBEDS, CHUNK_METADATA, DOCUMENT_PREVIEW_LENGTH, load_movies, format_search_result
+from .search_utils import EMBED_PATH, CHUNK_EMBEDS, CHUNK_METADATA, DOCUMENT_PREVIEW_LENGTH, DEFAULT_SEMANTIC_CHUNK_SIZE, DEFAULT_OVERLAP, load_movies, format_search_result
 
 class SemanticSearch:
     def __init__(self, model_name="all-MiniLM-L6-v2") -> None:
@@ -18,13 +18,12 @@ class SemanticSearch:
         embedded_text = self.model.encode([text])
         return embedded_text[0]
     
-    def build_embeddings(self, documents: dict):
+    def build_embeddings(self, documents: list[dict]):
         self.documents = documents
 
         movie_list = []
         for doc in self.documents:
-            id = doc["id"]
-            self.doc_map[id] = doc
+            self.doc_map[doc["id"]] = doc
             doc_description = f"{doc['title']} {doc['description']}"
             movie_list.append(doc_description)
         
@@ -34,22 +33,21 @@ class SemanticSearch:
         np.save(EMBED_PATH, self.embeddings)
         return self.embeddings
     
-    def load_or_create_embeddings(self, documents: dict):
+    def load_or_create_embeddings(self, documents: list[dict]):
         self.documents = documents
 
         for doc in self.documents:
-            id = doc["id"]
-            self.doc_map[id] = doc
+            self.doc_map[doc["id"]] = doc
 
         if not os.path.exists(EMBED_PATH):
             raise Exception("file path does not exist")
         
-        self.embeddings = np.load(EMBED_PATH)
-        if len(self.embeddings) == len(self.documents):
-            return self.embeddings
-        else:
-            self.embeddings = self.build_embeddings(documents)
-        return self.embeddings(documents)
+        if os.path.exists(EMBED_PATH):
+            self.embeddings = np.load(EMBED_PATH)
+            if len(self.embeddings) == len(documents):
+                return self.embeddings
+
+        return self.build_embeddings(documents)
     
     def search(self, query: str, limit: int) -> list[dict]:
         if self.embeddings is None:
@@ -82,24 +80,29 @@ class ChunkedSemanticSearch(SemanticSearch):
         self.chunk_embeddings = None
         self.chunk_metadata = None
     
-    def build_chunk_embeddings(self, documents: dict) -> np.ndarray:
+    def build_chunk_embeddings(self, documents: list[dict]) -> np.ndarray:
+        print("creating new chunk embeddings....")
         self.documents = documents
-        chunks = []
+        all_chunks = []
         metadata = []
         for doc in documents:
-            id = doc["id"]
-            self.doc_map[id] = doc
-            if doc["description"] == "":
+            self.doc_map[doc["id"]] = doc
+        
+        for idx, doc in enumerate(documents):
+            text = doc.get("description", "")
+            if not text.strip():
                 continue
-            chunk = semantic_chunk_text(doc["description"], 4, 1)
-            i = 0
-            for c in chunk:
-                chunks.append(c)
-                metadata.append({"movie_idx": id,
-                               "chunk_idx": i,
-                               "total_chunks": len(chunk)})
-                i += 1
-        self.chunk_embeddings = self.model.encode(chunks, show_progress_bar=True)
+
+            chunks = semantic_chunk_text(text, limit=DEFAULT_SEMANTIC_CHUNK_SIZE, overlap=DEFAULT_OVERLAP)
+
+            for i, chunk in enumerate(chunks):
+                all_chunks.append(chunk)
+                metadata.append(
+                    {"movie_idx": idx,
+                     "chunk_idx": i,
+                     "total_chunks": len(chunks)}
+                )
+        self.chunk_embeddings = self.model.encode(all_chunks, show_progress_bar = True)
         self.chunk_metadata = metadata
 
         os.makedirs(os.path.dirname(CHUNK_EMBEDS), exist_ok=True)
@@ -113,7 +116,6 @@ class ChunkedSemanticSearch(SemanticSearch):
         self.documents = documents
         self.doc_map = {}
         for doc in documents:
-            id = doc["id"]
             self.doc_map[doc["id"]] = doc
 
             if os.path.exists(CHUNK_EMBEDS) and os.path.exists(CHUNK_METADATA):
@@ -157,7 +159,6 @@ class ChunkedSemanticSearch(SemanticSearch):
 
         results = []
         for movie_idx, score in sorted_movies[:limit]:
-            print(movie_idx)
             if movie_idx is None:
                 continue
             doc = self.documents[movie_idx]

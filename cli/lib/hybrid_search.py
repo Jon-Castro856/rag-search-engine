@@ -3,8 +3,8 @@ from .keyword_search import InvertedIndex
 from .semantic_search import ChunkedSemanticSearch
 from .search_utils import format_search_result
 class HybridSearch:
-    def __init__(self, documents):
-        self.document = documents
+    def __init__(self, documents: list[dict]):
+        self.documents = documents
         self.semantic_search = ChunkedSemanticSearch()
         self.semantic_search.load_or_create_chunk_embeddings(documents)
 
