@@ -14,6 +14,12 @@ def main() -> None:
     weighted_search.add_argument("query", type=str, help="query to be searched")
     weighted_search.add_argument("--alpha", type=float, default=0.5, help="weighted value, that leans towards more semantic(0) or keyword(1) oriented results")
     weighted_search.add_argument("--limit", type=int, default=5, help="max number of movies to return")
+
+    rrf_search = subparsers.add_parser("rrf-search", help="search for movies using a reciprocal ranked fusion method")
+    rrf_search.add_argument("query", type=str, help="query to search")
+    rrf_search.add_argument("-k", type=int, default=60, help="adjusts weight of search rankings")
+    rrf_search.add_argument("--limit", type=int, default=5, help="maximum number of movies to show")
+
     args = parser.parse_args()
 
     match args.command:
@@ -25,14 +31,24 @@ def main() -> None:
             movies = load_movies()
             model = HybridSearch(movies)
             query, alpha, limit = args.query, args.alpha, args.limit
-            
-
             results = model.weighted_search(query, alpha, limit)
 
             for i, res in enumerate(results):
                 print(f"{i+1}. {res["title"]}")
                 print(f"Hybrid Score: {res["score"]}")
                 print(f"BM25: {res["metadata"]["bm25score"]}, Semantic: {res["metadata"]["semscore"]}")
+                print(f"{res["document"]}...")
+        case "rrf-search":
+            movies = load_movies()
+            model = HybridSearch(movies)
+            query, k, limit = args.query, args.k, args.limit
+
+            results = model.rrf_search(query, k, limit)
+
+            for i, res in enumerate(results):
+                print(f"{i+1}. {res["title"]}")
+                print(f"RRF Score: {res["score"]}")
+                print(f"BM25 Rank: {res["metadata"]["bm25_rank"]}, Semantic Rank: {res["metadata"]["semantic_rank"]}")
                 print(f"{res["document"]}...")
 
         case _:

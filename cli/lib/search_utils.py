@@ -2,6 +2,8 @@ import json
 import os
 from typing import Any
 
+DEFAULT_ALPHA = 0.5
+DEFAULT_K = 60
 DEFAULT_SEARCH_LIMIT = 5
 SCORE_PRECISION = 3
 DOCUMENT_PREVIEW_LENGTH = 100
@@ -50,7 +52,7 @@ def format_search_result(
     return {
         "id": doc_id,
         "title": title,
-        "document": document,
+        "document": document[:DOCUMENT_PREVIEW_LENGTH],
         "score": round(score, SCORE_PRECISION),
         "metadata": metadata if metadata else {},
     } 
