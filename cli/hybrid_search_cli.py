@@ -146,7 +146,7 @@ User query: "{query}"
         print(f"Enahnced Query ({enhancement}): '{query}' -> '{response.text}'")
         query = response.text
 
-    return query
+    return f"{query} {response.text}".strip()
 
 if __name__ == "__main__":
     main()
