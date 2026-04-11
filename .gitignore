@@ -13,3 +13,4 @@ wheels/
 .venv
 cache/chunk_embeddings.npy
 cache/chunk_metadata.json
+.env

@@ -132,7 +132,7 @@ def combine_searches(bm25: list[dict], sem: list[dict], alpha: float=DEFAULT_ALP
                 combined_ranks[result]["rrf_score"] = bm25_rrf
 
         else:
-            combined_ranks[result]["rrf_score"] = rrf_score(result["semrank"])
+            combined_ranks[result]["rrf_score"] = rrf_score(combined_ranks[result]["semrank"])
     
     rrf_results = []
     for id, data in combined_ranks.items():
