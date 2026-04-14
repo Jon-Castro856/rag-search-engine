@@ -2,6 +2,7 @@ import argparse
 import os
 import time
 import json
+from sentence_transformers import CrossEncoder
 from google import genai
 from dotenv import load_dotenv
 
@@ -51,6 +52,10 @@ def main() -> None:
                     limit *= 5
                     results = model.rrf_search(query, k, limit)
                     results = batch_rank(query, results)
+                case "cross_encoder":
+                    limit *= 5
+                    results = model.rrf_search(query, k, limit)
+                    results = cross_encode(results, query)
                 case _:
                     results = model.rrf_search(query, k, limit)
                                             
@@ -58,7 +63,8 @@ def main() -> None:
                 if i == args.limit:
                     break
                 print(f"{i+1}. {res["title"]}")
-                print(f"LLM Rerank Score: {res.get("reranked_score", "N/A")}")
+                print(f"Cross_Encoder_Score: {res["encoder_score"]}" if res.get("encoder_score", None) else "")
+                print(f"LLM Rerank Score: {res["reranked_score"]}" if res.get("reranked_score", None) else "")
                 print(f"RRF Score: {res["score"]}")
                 print(f"BM25 Rank: {res["metadata"]["bm25_rank"]}, Semantic Rank: {res["metadata"]["semantic_rank"]}")
                 print(f"{res["document"]}...")
@@ -135,7 +141,19 @@ def batch_rank(query: str, movies: list[dict]) -> list[dict]:
                 resorted.append(movie)
                 continue
     return resorted
+
+def cross_encode(movies: list[dict], query: str) -> list[dict]:
+    pairs = []
+    for movie in movies:
+        pairs.append([query, f"{movie.get('title', '')} - {movie.get('document', '')}"])
     
+    encoder = CrossEncoder("cross-encoder/ms-marco-TinyBERT-L2-v2")
+    scores = encoder.predict(pairs)
+    for i in range(len(movies)):
+        movies[i]["encoder_score"] = scores[i]
+
+    return sorted(movies, key=lambda x: x["encoder_score"], reverse=True)
+       
 def load_llm() -> genai.Client:
     load_dotenv()
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -162,7 +180,7 @@ def init_parser() -> argparse.ArgumentParser:
     rrf_search.add_argument("-k", type=int, default=60, help="adjusts weight of search rankings")
     rrf_search.add_argument("--limit", type=int, default=5, help="maximum number of movies to show")
     rrf_search.add_argument("--enhance", type=str, choices=["spell", "rewrite", "expand"], help="use ai to correct your spelling mistakes")
-    rrf_search.add_argument("--rerank-method", type=str, choices=["individual", "batch"], help="use an LLM to rerank the movies after the search query")
+    rrf_search.add_argument("--rerank-method", type=str, choices=["individual", "batch", "cross_encoder"], help="use an LLM to rerank the movies after the search query")
 
     return parser
 
