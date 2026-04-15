@@ -21,6 +21,7 @@ CACHE_DIR = os.path.join(PROJECT_ROOT, "cache")
 EMBED_PATH = os.path.join(CACHE_DIR, "movie_embeddings.npy")
 CHUNK_EMBEDS = os.path.join(CACHE_DIR, "chunk_embeddings.npy")
 CHUNK_METADATA = os.path.join(CACHE_DIR, "chunk_metadata.json")
+GOLDEN_DATASET = os.path.join(PROJECT_ROOT, "data", "golden_dataset.json")
 
 
 def load_movies() -> list[dict]:
