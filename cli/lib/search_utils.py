@@ -24,6 +24,9 @@ CHUNK_METADATA = os.path.join(CACHE_DIR, "chunk_metadata.json")
 GOLDEN_DATASET = os.path.join(PROJECT_ROOT, "data", "golden_dataset.json")
 
 
+def load_golden_dataset() -> dict:
+    with open(GOLDEN_DATASET, "r") as f:
+        return json.load(f)
 def load_movies() -> list[dict]:
     with open(DATA_PATH, "r") as f:
         data = json.load(f)

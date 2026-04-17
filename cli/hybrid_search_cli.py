@@ -67,7 +67,7 @@ def main() -> None:
                 print(f"LLM Rerank Score: {res["reranked_score"]}" if res.get("reranked_score", None) else "")
                 print(f"RRF Score: {res["score"]}")
                 print(f"BM25 Rank: {res["metadata"]["bm25_rank"]}, Semantic Rank: {res["metadata"]["semantic_rank"]}")
-                print(f"{res["document"]}...")
+                print(f"{res["document"]}...\n")
                 
 
         case _:
