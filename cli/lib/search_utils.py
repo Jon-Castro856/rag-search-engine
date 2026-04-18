@@ -9,7 +9,7 @@ DEFAULT_ALPHA = 0.5
 DEFAULT_K = 60
 DEFAULT_SEARCH_LIMIT = 5
 SCORE_PRECISION = 3
-DOCUMENT_PREVIEW_LENGTH = 100
+DOCUMENT_PREVIEW_LENGTH = 500
 DEFAULT_SEMANTIC_CHUNK_SIZE = 4
 DEFAULT_OVERLAP = 1
 
@@ -25,6 +25,7 @@ EMBED_PATH = os.path.join(CACHE_DIR, "movie_embeddings.npy")
 CHUNK_EMBEDS = os.path.join(CACHE_DIR, "chunk_embeddings.npy")
 CHUNK_METADATA = os.path.join(CACHE_DIR, "chunk_metadata.json")
 GOLDEN_DATASET = os.path.join(PROJECT_ROOT, "data", "golden_dataset.json")
+IMAGE = os.path.join(PROJECT_ROOT, "data", "paddington.jpg")
 
 
 def load_golden_dataset() -> dict:
@@ -67,7 +68,7 @@ def format_search_result(
     return {
         "id": doc_id,
         "title": title,
-        "document": document[:DOCUMENT_PREVIEW_LENGTH],
+        "document": document,
         "score": round(score, SCORE_PRECISION),
         "metadata": metadata if metadata else {},
     }
@@ -184,3 +185,62 @@ Search results:
 {results}
 
 Provide a comprehensive 3–4 sentence answer that combines information from multiple sources:"""
+
+citations_prompt = """Answer the query below and give information based on the provided documents.
+
+The answer should be tailored to users of Hoopla, a movie streaming service.
+If not enough information is available to provide a good answer, say so, but give the best answer possible while citing the sources available.
+
+Query: {query}
+
+Documents:
+{documents}
+
+Instructions:
+- Provide a comprehensive answer that addresses the query
+- Cite sources in the format [1], [2], etc. when referencing information
+- If sources disagree, mention the different viewpoints
+- If the answer isn't in the provided documents, say "I don't have enough information"
+- Be direct and informative
+
+Answer:"""
+
+question_prompt = """Answer the user's question based on the provided movies that are available on Hoopla, a streaming service.
+
+Question: {question}
+
+Documents:
+{context}
+
+Instructions:
+- Answer questions directly and concisely
+- Be casual and conversational
+- Don't be cringe or hype-y
+- Talk like a normal person would in a chat conversation
+
+Answer:"""
+
+other_question_prompt = prompt = """Answer the following question based on the provided documents.
+
+Question: {question}
+
+Documents:
+{context}
+
+General instructions:
+- Answer directly and concisely
+- Use only information from the documents
+- If the answer isn't in the documents, say "I don't have enough information"
+- Cite sources when possible
+
+Guidance on types of questions:
+- Factual questions: Provide a direct answer
+- Analytical questions: Compare and contrast information from the documents
+- Opinion-based questions: Acknowledge subjectivity and provide a balanced view
+
+Answer:"""
+
+image_prompt = """Given the included image and text query, rewrite the text query to improve search results from a movie database. Make sure to:
+- Synthesize visual and textual information
+- Focus on movie-specific details (actors, scenes, style, etc.)
+- Return only the rewritten query, without any additional commentary"""
