@@ -1,29 +1,17 @@
 import argparse
 import os
+import time
+import json
+from sentence_transformers import CrossEncoder
 from google import genai
 from dotenv import load_dotenv
 
+
 from lib.hybrid_search import HybridSearch, normalize_score
-from lib.search_utils import load_movies
+from lib.search_utils import load_movies, spell_check_prompt, rewrite_prompt, expand_prompt, rerank_prompt, batch_rank_prompt
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Hybrid Search CLI")
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-    normalize = subparsers.add_parser("normalize", help="normalize provided score values")
-    normalize.add_argument("scores", nargs="+", type=float, help="numbers to be normalized")
-
-    weighted_search = subparsers.add_parser("weighted-search", help="perform a hybrid search using keyword and semantic search tecniques")
-    weighted_search.add_argument("query", type=str, help="query to be searched")
-    weighted_search.add_argument("--alpha", type=float, default=0.5, help="weighted value, that leans towards more semantic(0) or keyword(1) oriented results")
-    weighted_search.add_argument("--limit", type=int, default=5, help="max number of movies to return")
-
-    rrf_search = subparsers.add_parser("rrf-search", help="search for movies using a reciprocal ranked fusion method")
-    rrf_search.add_argument("query", type=str, help="query to search")
-    rrf_search.add_argument("-k", type=int, default=60, help="adjusts weight of search rankings")
-    rrf_search.add_argument("--limit", type=int, default=5, help="maximum number of movies to show")
-    rrf_search.add_argument("--enhance", type=str, choices=["spell", "rewrite", "expand"], help="use ai to correct your spelling mistakes")
-
+    parser = init_parser()
     args = parser.parse_args()
 
     match args.command:
@@ -54,33 +42,42 @@ def main() -> None:
                     query = query_rewrite(query, args.enhance)
                 case "expand":
                     query = query_expansion(query, args.enhance)
-
-            results = model.rrf_search(query, k, limit)
+            
+            match args.rerank_method:
+                case "individual":
+                    limit *= 5
+                    results = model.rrf_search(query, k, limit)
+                    results = llm_rerank(query, results)
+                case "batch":
+                    limit *= 5
+                    results = model.rrf_search(query, k, limit)
+                    results = batch_rank(query, results)
+                case "cross_encoder":
+                    limit *= 5
+                    results = model.rrf_search(query, k, limit)
+                    results = cross_encode(results, query)
+                case _:
+                    results = model.rrf_search(query, k, limit)
+                                            
             for i, res in enumerate(results):
+                if i == args.limit:
+                    break
                 print(f"{i+1}. {res["title"]}")
+                print(f"Cross_Encoder_Score: {res["encoder_score"]}" if res.get("encoder_score", None) else "")
+                print(f"LLM Rerank Score: {res["reranked_score"]}" if res.get("reranked_score", None) else "")
                 print(f"RRF Score: {res["score"]}")
                 print(f"BM25 Rank: {res["metadata"]["bm25_rank"]}, Semantic Rank: {res["metadata"]["semantic_rank"]}")
-                print(f"{res["document"]}...")
+                print(f"{res["document"]}...\n")
+                
 
         case _:
             parser.print_help()
             
 
 def spell_checker(query: str, enhancement: str) -> str:
-    load_dotenv()
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY environment variable not set")
-    
-    client = genai.Client(api_key=api_key)
+    client = load_llm()
     response = client.models.generate_content(model="gemma-3-27b-it", 
-                                            contents=f"""Fix any spelling errors in the user-provided movie search query below.
-Correct only clear, high-confidence typos. Do not rewrite, add, remove, or reorder words.
-Preserve punctuation and capitalization unless a change is required for a typo fix.
-If there are no spelling errors, or if you're unsure, output the original query unchanged.
-Output only the final query text, nothing else.
-User query: "{query}"
-""")
+                                            contents=spell_check_prompt.format(query=query))
     if response.text != query:
         print(f"Enahnced Query ({enhancement}): '{query}' -> '{response.text}'")
         query = response.text
@@ -88,32 +85,9 @@ User query: "{query}"
     return query
 
 def query_rewrite(query: str, enhancement: str) -> str:
-    load_dotenv()
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY environment variable not set")
-    
-    client = genai.Client(api_key=api_key)
+    client = load_llm()
     response = client.models.generate_content(model="gemma-3-27b-it",
-                                              contents=f"""Rewrite the user-provided movie search query below to be more specific and searchable.
-
-Consider:
-- Common movie knowledge (famous actors, popular films)
-- Genre conventions (horror = scary, animation = cartoon)
-- Keep the rewritten query concise (under 10 words)
-- It should be a Google-style search query, specific enough to yield relevant results
-- Don't use boolean logic
-
-Examples:
-- "that bear movie where leo gets attacked" -> "The Revenant Leonardo DiCaprio bear attack"
-- "movie about bear in london with marmalade" -> "Paddington London marmalade"
-- "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
-
-If you cannot improve the query, output the original unchanged.
-Output only the rewritten query text, nothing else.
-
-User query: "{query}"
-""")
+                                              contents=rewrite_prompt.format(query=query))
     
     if response.text != query:
         print(f"Enahnced Query ({enhancement}): '{query}' -> '{response.text}'")
@@ -122,31 +96,93 @@ User query: "{query}"
     return query
 
 def query_expansion(query: str, enhancement: str) -> str:
+    client = load_llm()
+    response = client.models.generate_content(model="gemma-3-27b-it",
+                                              contents=expand_prompt.format(query=query))
+    if response.text != query:
+        print(f"Enahnced Query ({enhancement}): '{query}' -> '{response.text}'")
+        query = response.text
+
+    return f"{query} {response.text}".strip()
+
+def llm_rerank(query: str, movies: list[dict]) -> list[dict]:
+    client = load_llm()
+
+    for movie in movies:
+        title = movie["title"]
+        doc = movie["document"]
+        response = client.models.generate_content(model="gemma-3-27b-it",
+                                              contents=rerank_prompt.format(query=query, title=title, doc=doc))
+        movie["reranked_score"] = response.text
+        time.sleep(3)
+
+    return sorted(movies, key=lambda x: x["reranked_score"], reverse=True)
+
+def batch_rank(query: str, movies: list[dict]) -> list[dict]:
+    client = load_llm()
+
+    movie_strings = []
+    for movie in movies:
+        movie_string = f"{movie["id"]}, {movie["title"]}, {movie["document"]}"
+        movie_strings.append(movie_string)
+
+    response = client.models.generate_content(model="gemma-3-27b-it",
+                                              contents=batch_rank_prompt.format(query=query, doc_list_str=movie_strings))
+    
+    jason = response.text.replace("'", '"')
+    ranks = json.loads(jason)
+    ranks = [int(x) for x in ranks]
+    resorted = []
+    for rank in ranks:
+        for movie in movies:
+            item = movie.get("id", None)
+            if item == rank:
+                movie["reranked_score"] = ranks.index(rank) + 1
+                resorted.append(movie)
+                continue
+    return resorted
+
+def cross_encode(movies: list[dict], query: str) -> list[dict]:
+    pairs = []
+    for movie in movies:
+        pairs.append([query, f"{movie.get('title', '')} - {movie.get('document', '')}"])
+    
+    encoder = CrossEncoder("cross-encoder/ms-marco-TinyBERT-L2-v2")
+    scores = encoder.predict(pairs)
+    for i in range(len(movies)):
+        movies[i]["encoder_score"] = scores[i]
+
+    return sorted(movies, key=lambda x: x["encoder_score"], reverse=True)
+       
+def load_llm() -> genai.Client:
     load_dotenv()
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY environment variable not set")
     
     client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(model="gemma-3-27b-it",
-                                              contents=f"""Expand the user-provided movie search query below with related terms.
+    return client
 
-Add synonyms and related concepts that might appear in movie descriptions.
-Keep expansions relevant and focused.
-Output only the additional terms; they will be appended to the original query.
+def init_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Hybrid Search CLI")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-Examples:
-- "scary bear movie" -> "scary horror grizzly bear movie terrifying film"
-- "action movie with bear" -> "action thriller bear chase fight adventure"
-- "comedy with bear" -> "comedy funny bear humor lighthearted"
+    normalize = subparsers.add_parser("normalize", help="normalize provided score values")
+    normalize.add_argument("scores", nargs="+", type=float, help="numbers to be normalized")
 
-User query: "{query}"
-""")
-    if response.text != query:
-        print(f"Enahnced Query ({enhancement}): '{query}' -> '{response.text}'")
-        query = response.text
+    weighted_search = subparsers.add_parser("weighted-search", help="perform a hybrid search using keyword and semantic search tecniques")
+    weighted_search.add_argument("query", type=str, help="query to be searched")
+    weighted_search.add_argument("--alpha", type=float, default=0.5, help="weighted value, that leans towards more semantic(0) or keyword(1) oriented results")
+    weighted_search.add_argument("--limit", type=int, default=5, help="max number of movies to return")
 
-    return f"{query} {response.text}".strip()
+    rrf_search = subparsers.add_parser("rrf-search", help="search for movies using a reciprocal ranked fusion method")
+    rrf_search.add_argument("query", type=str, help="query to search")
+    rrf_search.add_argument("-k", type=int, default=60, help="adjusts weight of search rankings")
+    rrf_search.add_argument("--limit", type=int, default=5, help="maximum number of movies to show")
+    rrf_search.add_argument("--enhance", type=str, choices=["spell", "rewrite", "expand"], help="use ai to correct your spelling mistakes")
+    rrf_search.add_argument("--rerank-method", type=str, choices=["individual", "batch", "cross_encoder"], help="use an LLM to rerank the movies after the search query")
+
+    return parser
 
 if __name__ == "__main__":
     main()

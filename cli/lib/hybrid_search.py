@@ -94,45 +94,36 @@ def hybrid_score(bm25_score: float, semantic_score: float, alpha: float=0.5) -> 
 def rrf_score(rank: int, k: int=60) -> float:
     return 1 / (k + rank)
 
-def combine_searches(bm25: list[dict], sem: list[dict], alpha: float=DEFAULT_ALPHA) -> list[dict]:
+def combine_searches(bm25: list[dict], sem: list[dict], k: int = 60) -> list[dict]:
     combined_ranks = {}
     rank = 1
-    for result in bm25:
-        id = result["id"]
-        combined_ranks[id] = {
-            "title": result["title"],
-            "document": result["document"],
-            "bm25rank": rank,
-            "semrank": None
-        }
-        rank += 1
+    for rank, result in enumerate(bm25, start=1):
+        doc_id = result["id"]
+        if doc_id not in combined_ranks:
+            combined_ranks[doc_id] = {
+                "title": result["title"],
+                "document": result["document"],
+                "rrf_score": 0.0,
+                "bm25_rank": None,
+                "semantic_rank": None,
+            }
+        if combined_ranks[doc_id]["bm25_rank"] is None:
+            combined_ranks[doc_id]["bm25_rank"] = rank
+            combined_ranks[doc_id]["rrf_score"] += rrf_score(rank, k)
     
-    rank = 1
-    for result in sem:
-        id = result["id"]
-        if id not in combined_ranks:
-            combined_ranks[id] = {
-            "title": result["title"],
-            "document": result["document"],
-            "bm25rank": None,
-            "semrank": rank
-        }
-        else:
-            combined_ranks[id]["semrank"] = rank
-        rank += 1
-    
-    for result in combined_ranks:
-        if combined_ranks[result]["bm25rank"] is not None:
-            bm25_rrf = rrf_score(combined_ranks[result]["bm25rank"])
-
-            if combined_ranks[result]["semrank"] is not None:
-                sem_rrf = rrf_score(combined_ranks[result]["semrank"])
-                combined_ranks[result]["rrf_score"] = bm25_rrf + sem_rrf
-            else:
-                combined_ranks[result]["rrf_score"] = bm25_rrf
-
-        else:
-            combined_ranks[result]["rrf_score"] = rrf_score(combined_ranks[result]["semrank"])
+    for rank, result in enumerate(sem, start=1):
+        doc_id = result["id"]
+        if doc_id not in combined_ranks:
+            combined_ranks[doc_id] = {
+                "title": result["title"],
+                "document": result["document"],
+                "rrf_score": 0.0,
+                "bm25_rank": None,
+                "semantic_rank": None,
+            }
+        if combined_ranks[doc_id]["semantic_rank"] is None:
+            combined_ranks[doc_id]["semantic_rank"] = rank
+            combined_ranks[doc_id]["rrf_score"] += rrf_score(rank, k)
     
     rrf_results = []
     for id, data in combined_ranks.items():
@@ -141,8 +132,8 @@ def combine_searches(bm25: list[dict], sem: list[dict], alpha: float=DEFAULT_ALP
             title=data["title"],
             document=data["document"],
             score=data["rrf_score"],
-            bm25_rank=data['bm25rank'],
-            semantic_rank=data["semrank"]
+            bm25_rank=data['bm25_rank'],
+            semantic_rank=data["semantic_rank"]
         )
         rrf_results.append(result)
 
