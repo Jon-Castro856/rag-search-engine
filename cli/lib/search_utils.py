@@ -1,7 +1,10 @@
 import json
 import os
+from dotenv import load_dotenv
+from google import genai
 from typing import Any
 
+MODEL_NAME = "gemma-3-27b-it"
 DEFAULT_ALPHA = 0.5
 DEFAULT_K = 60
 DEFAULT_SEARCH_LIMIT = 5
@@ -27,16 +30,24 @@ GOLDEN_DATASET = os.path.join(PROJECT_ROOT, "data", "golden_dataset.json")
 def load_golden_dataset() -> dict:
     with open(GOLDEN_DATASET, "r") as f:
         return json.load(f)
+    
 def load_movies() -> list[dict]:
     with open(DATA_PATH, "r") as f:
         data = json.load(f)
     return data["movies"]
 
-
 def load_stopwords() -> list[str]:
     with open(STOPWORDS_PATH, "r") as f:
         return f.read().splitlines()
 
+def load_llm() -> genai.Client:
+    load_dotenv()
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY environment variable not set")
+    
+    client = genai.Client(api_key=api_key)
+    return client
 
 def format_search_result(
     doc_id: str, title: str, document: str, score: float, **metadata: Any
@@ -131,3 +142,45 @@ For example:
 [75, 12, 34, 2, 1]
 
 Ranking:"""
+
+eval_prompt = """Rate how relevant each result is to this query on a 0-3 scale:
+
+Query: "{query}"
+
+Results:
+{results}
+
+Scale:
+- 3: Highly relevant
+- 2: Relevant
+- 1: Marginally relevant
+- 0: Not relevant
+
+Do NOT give any numbers other than 0, 1, 2, or 3.
+
+Return ONLY the scores in the same order you were given the documents. Return a valid JSON list, nothing else. For example:
+
+[2, 0, 3, 2, 0, 1]"""
+
+rag_prompt = """You are a RAG agent for Hoopla, a movie streaming service.
+Your task is to provide a natural-language answer to the user's query based on documents retrieved during search.
+Provide a comprehensive answer that addresses the user's query.
+
+Query: {query}
+
+Documents:
+{docs}"""
+
+summarize_prompt = """Provide information useful to the query below by synthesizing data from multiple search results in detail.
+
+The goal is to provide comprehensive information so that users know what their options are.
+Your response should be information-dense and concise, with several key pieces of information about the genre, plot, etc. of each movie.
+
+This should be tailored to Hoopla users. Hoopla is a movie streaming service.
+
+Query: {query}
+
+Search results:
+{results}
+
+Provide a comprehensive 3–4 sentence answer that combines information from multiple sources:"""

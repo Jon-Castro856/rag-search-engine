@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 
 from lib.hybrid_search import HybridSearch, normalize_score
-from lib.search_utils import load_movies, spell_check_prompt, rewrite_prompt, expand_prompt, rerank_prompt, batch_rank_prompt
+from lib.search_utils import load_movies, spell_check_prompt, rewrite_prompt, expand_prompt, rerank_prompt, batch_rank_prompt, eval_prompt, load_llm
 
 def main() -> None:
     parser = init_parser()
@@ -63,11 +63,18 @@ def main() -> None:
                 if i == args.limit:
                     break
                 print(f"{i+1}. {res["title"]}")
-                print(f"Cross_Encoder_Score: {res["encoder_score"]}" if res.get("encoder_score", None) else "")
-                print(f"LLM Rerank Score: {res["reranked_score"]}" if res.get("reranked_score", None) else "")
+                print(f"Cross_Encoder_Score: {res["encoder_score"]}" if res.get("encoder_score", None) else "No Encoder Score")
+                print(f"LLM Rerank Score: {res["reranked_score"]}" if res.get("reranked_score", None) else "No LLM Rerank Score")
                 print(f"RRF Score: {res["score"]}")
                 print(f"BM25 Rank: {res["metadata"]["bm25_rank"]}, Semantic Rank: {res["metadata"]["semantic_rank"]}")
                 print(f"{res["document"]}...\n")
+
+            if args.evaluate:
+                print("Using LLM to evaluate results....")
+                llm_results = llm_eval(query, results)
+
+                for res in llm_results:
+                    print(res)
                 
 
         case _:
@@ -154,14 +161,7 @@ def cross_encode(movies: list[dict], query: str) -> list[dict]:
 
     return sorted(movies, key=lambda x: x["encoder_score"], reverse=True)
        
-def load_llm() -> genai.Client:
-    load_dotenv()
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY environment variable not set")
-    
-    client = genai.Client(api_key=api_key)
-    return client
+
 
 def init_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Hybrid Search CLI")
@@ -181,8 +181,28 @@ def init_parser() -> argparse.ArgumentParser:
     rrf_search.add_argument("--limit", type=int, default=5, help="maximum number of movies to show")
     rrf_search.add_argument("--enhance", type=str, choices=["spell", "rewrite", "expand"], help="use ai to correct your spelling mistakes")
     rrf_search.add_argument("--rerank-method", type=str, choices=["individual", "batch", "cross_encoder"], help="use an LLM to rerank the movies after the search query")
+    rrf_search.add_argument("--evaluate", action="store_true", help="use an LLM to evaluate your search results after the fact")
 
     return parser
+
+def llm_eval(query: str, movies: list[dict]) -> list[str]:
+    client = load_llm()
+    movie_string = ""
+    for movie in movies:
+        movie_string += movie["title"] + "\n"
+
+    response = client.models.generate_content(model="gemma-3-27b-it", contents=eval_prompt.format(query=query, results=movie_string))
+
+    fixing = response.text.replace("'", '"')
+    scores = json.loads(fixing)
+    scores = [int(x) for x in scores]
+
+    llm_evaluation = []
+    for i in range(len(movies)):
+        llm_evaluation.append(f"{i+1}. {movies[i]["title"]}: {scores[i]}/3")
+
+    return llm_evaluation
+
 
 if __name__ == "__main__":
     main()

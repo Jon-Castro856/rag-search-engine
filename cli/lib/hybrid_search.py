@@ -65,7 +65,7 @@ class HybridSearch:
             final.append(format_search_result(id, title, document["description"][:100], score, bm25score=movie["bm25score"], semscore=movie["semscore"]))
         return final[:limit]
     
-    def rrf_search(self, query, k, limit=10) -> list[dict]:
+    def rrf_search(self, query, k=60, limit=10) -> list[dict]:
         bm25_results = self._bm25search(query, limit * 500)
         sem_results = self.semantic_search.chunk_search(query, limit * 500)
 
